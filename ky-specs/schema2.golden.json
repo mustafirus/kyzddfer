@@ -1,0 +1,21 @@
+{
+  "rack": {
+    "tables": [
+      {
+        "name": "validation_test",
+        "fields": [
+          {
+            "name": "email",
+            "type": "varchar(255)",
+            "attrs": {
+              "validate_re": "\\w+@\\w+\\.\\w+"
+            },
+            "flags": [
+              "required"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

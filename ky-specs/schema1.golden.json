@@ -1,0 +1,103 @@
+{
+  "rack": {
+    "apps": [
+      {
+        "name": "main_app",
+        "attrs": {
+          "version": "1.0"
+        },
+        "layouts": [
+          {
+            "name": "posts_list",
+            "root_node": {
+              "tag": "list",
+              "attrs": {
+                "table": "posts"
+              },
+              "nodes": [
+                {
+                  "tag": "id",
+                  "attrs": {
+                    "label": "ID"
+                  }
+                },
+                {
+                  "tag": "title",
+                  "attrs": {
+                    "label": "Title"
+                  }
+                },
+                {
+                  "tag": "user_id.name",
+                  "attrs": {
+                    "label": "Author Name"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "tables": [
+      {
+        "name": "posts",
+        "attrs": {
+          "display_name": "Posts"
+        },
+        "fields": [
+          {
+            "name": "content",
+            "type": "text"
+          },
+          {
+            "name": "title",
+            "type": "varchar(255)"
+          },
+          {
+            "name": "user_id",
+            "type": "ref(users)",
+            "attrs": {
+              "label": "Author"
+            },
+            "flags": [
+              "fk"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "users",
+        "attrs": {
+          "description": "System users table",
+          "display_name": "Users"
+        },
+        "flags": [
+          "master"
+        ],
+        "fields": [
+          {
+            "name": "email",
+            "type": "varchar(255)",
+            "attrs": {
+              "label": "Email Address"
+            },
+            "flags": [
+              "unique"
+            ]
+          },
+          {
+            "name": "name",
+            "type": "varchar(100)",
+            "attrs": {
+              "label": "User Name"
+            },
+            "flags": [
+              "required"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

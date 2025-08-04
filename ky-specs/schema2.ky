@@ -1,0 +1,6 @@
+rack ver(1.0)
+  tables
+    validation_test
+      # Перевірка "сирого" рядка для регулярного виразу
+      email varchar(255) !required validate_re([[\w+@\w+\.\w+]])
+  apps

@@ -1,0 +1,77 @@
+# файл: project_management.ky
+
+rack ver(1.0)
+  tables
+    # Основна таблиця користувачів
+    users
+      full_name varchar(150) !required
+      email varchar(100) !required,unique validate_re([[^\\w+@\\w+\\.\\w+$]])
+      role varchar(50) !required
+      created_at timestamp default(now)
+    
+    # Таблиця проєктів
+    projects
+      name varchar(200) !required,unique
+      description text
+      start_date date
+      end_date date
+      manager ref(users)
+    
+    # Таблиця завдань
+    tasks
+      project ref(projects) !required
+      author ref(users)
+      title varchar(255) !required
+      description text
+      status varchar(50) !required default(To Do)
+      priority varchar(50) !required default(Medium)
+      due_date date
+    
+    # Таблиця для зв'язку завдань та виконавців
+    task_assignees unique(task, user)
+      task ref(tasks) !required
+      user ref(users) !required
+    
+    # Таблиця коментарів до завдань
+    comments
+      task ref(tasks) !required
+      user ref(users) !required
+      content text !required
+      created_at timestamp default(now)
+
+    # Таблиця для запису витраченого часу
+    time_logs
+      task ref(tasks) !required
+      user ref(users) !required
+      hours_spent numeric(5, 2) !required check(hours_spent > 0)
+      log_date date !required default(current_date)
+
+  apps
+    # Додаток для відстеження проєктів
+    project_tracker !active version(1.0)
+      
+      # Головне представлення зі списком проєктів.
+      # Рядок нижче - це метадані лейауту.
+      projects !default title("Проєкти")
+      # А цей рядок - його кореневий вузол (root_node).
+      # Вони знаходяться на одному рівні вкладеності.
+      list table(projects)
+        manager
+        name
+        end_date
+
+      # Представлення з детальною інформацією про проєкт.
+      # Знову, спочатку метадані...
+      project_details
+      # ...а потім кореневий вузол на тому ж рівні.
+      form table(projects)
+        hbox
+          fieldbox title("Інформація про проєкт")
+            name
+            description
+            manager
+          list table(tasks), title("Завдання проєкту"), filter([[[project_id = {current_project_id}]]])
+            title
+            status
+            priority
+            due_date

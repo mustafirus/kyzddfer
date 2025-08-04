@@ -1,0 +1,164 @@
+# файл: library_management.ky
+
+rack ver(1.6)
+  tables
+    # Довідник авторів
+    author
+      full_name varchar(150) !required,unique,searchable
+      birth_date date !searchable
+      biography text
+
+    # Каталог книг
+    book
+      title varchar(255) !required,searchable
+      author ref(author) !required
+      genre varchar(100) !searchable
+      publication_year int !searchable check(publication_year > 0)
+      isbn varchar(20) !unique,searchable
+      total_copies int !required default(1)
+
+    # Картки читачів
+    member
+      full_name varchar(150) !required,searchable
+      email varchar(100) !unique,searchable
+      join_date date !required default(current_date)
+      membership_status varchar(50) !required,searchable default(Active)
+
+    # Журнал видачі книг
+    book_loan
+      book ref(book) !required
+      member ref(member) !required
+      loan_date date !required default(current_date)
+      due_date date !required
+      return_date date
+
+  apps
+    # Додаток для персоналу бібліотеки
+    library_staff_app !active version(1.4)
+
+      # Представлення для пошуку та перегляду книг (головний екран)
+      book_catalog !default title(Каталог Книг), usage(menu)
+      list table(book)
+        title
+        author
+        publication_year
+        isbn
+
+      # Список читачів, видимий у меню
+      members_list title(Читачі), usage(menu)
+      list table(member)
+        full_name
+        email
+        membership_status
+
+      # Список усіх активних видач
+      active_loans_list title(Активні видачі), usage(menu)
+      list table(book_loan), filter([[[return_date IS NULL]]])
+        book.title
+        book.author.full_name
+        member.full_name
+        loan_date
+        due_date
+
+      # Список протермінованих видач
+      overdue_loans_list title(Протерміновані видачі), usage(menu)
+      list table(book_loan), filter([[[return_date IS NULL AND due_date < {current_date}]]])
+        book.title
+        book.author.full_name
+        member.full_name
+        loan_date
+        due_date
+
+      # Звіт по авторах, чиї книги зараз на руках
+      popular_authors_report title(Популярні автори), usage(menu)
+      list table(book_loan), filter([[[return_date IS NULL]]])
+        book.author.full_name
+        book.title
+        member.full_name
+
+      # Детальна форма читача (відкривається зі списку)
+      member_details title(Інформація про Читача), media(desktop), usage(detail)
+      form table(member)
+        hbox
+          vbox title(Особисті дані)
+            fieldbox
+              full_name
+              email
+            fieldbox
+              join_date
+              membership_status
+          list table(book_loan), title(Активні видачі), filter([[[member_id = {current_member_id} AND return_date IS NULL]]])
+            book
+            loan_date
+            due_date
+
+    # Додаток для клієнтів бібліотеки (читачів)
+    library_client_app !active version(1.0)
+
+      # -- Пошук книг: варіанти для різних пристроїв --
+
+      # Desktop: показуємо більше колонок
+      book_search title(Пошук Книг), media(desktop), usage(menu)
+      list table(book)
+        title
+        author
+        genre
+        publication_year
+
+      # Phone: тільки найважливіше
+      book_search_mobile title(Пошук Книг), media(phone), usage(menu)
+      list table(book)
+        title
+        author
+
+      # -- Персональний кабінет: варіанти для різних пристроїв --
+
+      # Desktop: дані зліва, списки справа
+      my_profile !default title(Мій кабінет), media(desktop)
+      form table(member)
+        hbox
+          vbox
+            fieldbox title(Мої дані)
+              full_name
+              email
+              join_date
+          vbox
+            list table(book_loan), title(Мої книги на руках), filter([[[member_id = {current_member_id} AND return_date IS NULL]]])
+              book
+              loan_date
+              due_date
+            list table(book_loan), title(Історія видач), filter([[[member_id = {current_member_id} AND return_date IS NOT NULL]]])
+              book
+              loan_date
+              return_date
+
+      # Tablet: все у вкладках
+      my_profile_tab title(Мій кабінет), media(tab)
+      form table(member)
+        tabbox
+          fieldbox !default title(Мої дані)
+            full_name
+            email
+            join_date
+          list table(book_loan), title(На руках), filter([[[member_id = {current_member_id} AND return_date IS NULL]]])
+            book
+            loan_date
+            due_date
+          list table(book_loan), title(Історія), filter([[[member_id = {current_member_id} AND return_date IS NOT NULL]]])
+            book
+            loan_date
+            return_date
+
+      # Phone: все одним вертикальним списком
+      my_profile_phone title(Мій кабінет), media(phone)
+      form table(member)
+        vbox
+          fieldbox title(Мої дані)
+            full_name
+            email
+          list table(book_loan), title(Мої книги на руках), filter([[[member_id = {current_member_id} AND return_date IS NULL]]])
+            book
+            due_date
+          list table(book_loan), title(Історія видач), filter([[[member_id = {current_member_id} AND return_date IS NOT NULL]]])
+            book
+            return_date

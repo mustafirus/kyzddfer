@@ -1,0 +1,23 @@
+rack ver(1.0)
+  tables
+    users !master display_name(Users), description(System users table)
+      # 'id' є неявним полем згідно зі специфікацією
+      name varchar(100) !required label(User Name)
+      email varchar(255) !unique label(Email Address)
+
+    posts display_name(Posts)
+      # 'id' є неявним полем
+      user_id ref(users) !fk label(Author)
+      title varchar(255)
+      content text
+
+  apps
+    main_app version(1.0)
+      # Визначення леяуту: рядок метаданих та рядок кореневого вузла
+      # знаходяться на одному рівні вкладеності.
+      posts_list
+      list table(posts)
+        # Дочірні елементи списку - це прості вузли, що представляють поля.
+        id label(ID)
+        title label(Title)
+        user_id.name label(Author Name)

@@ -1,0 +1,54 @@
+# файл: library_management.ky
+
+rack ver(1.6)
+  tables
+    # Довідник авторів
+    author
+      full_name varchar(150) !required,unique,searchable
+      birth_date date !searchable
+      biography text
+
+    # Каталог книг
+    book
+      title varchar(255) !required,searchable
+      author ref(author) !required
+      genre varchar(100) !searchable
+      publication_year int !searchable check(publication_year > 0)
+      isbn varchar(20) !unique,searchable
+      total_copies int !required default(1)
+
+    # Картки читачів
+    member
+      full_name varchar(150) !required,searchable
+      email varchar(100) !unique,searchable
+      join_date date !required default(current_date)
+      membership_status varchar(50) !required,searchable default(Active)
+
+    # Журнал видачі книг
+    book_loan
+      book ref(book) !required
+      member ref(members) !required
+      loan_date date !required default(current_date)
+      due_date date !required
+      return_date date
+
+  apps
+    # Додаток для персоналу бібліотеки
+    library_staff_app !active version(1.4)
+
+      # Детальна форма читача (відкривається зі списку)
+      member_details title(Інформація про Читача), media(desktop), usage(detail)
+      form table(members)
+        hbox
+          vbox title(Особисті дані)
+            fieldbox
+              full_name
+              email
+            fieldbox
+              join_date
+              membership_status
+          list table(book_loan), title(Активні видачі), filter([[[member_id = {current_member_id} AND return_date IS NULL]]])
+            book
+            loan_date
+            due_date
+
