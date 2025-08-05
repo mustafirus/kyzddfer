@@ -18,6 +18,7 @@
 #include <variant>
 #include <vector>
 #include <any>
+#include "RUIDGen.h"
 
 namespace ky {
 
@@ -447,6 +448,7 @@ struct Rack {
   flags_t flags{};
   attrs_t attrs{};
   std::unique_ptr<SqlDB> sqldb;
+  RUIDGen<roid_t> ruid32;
 
   // Попередній механізм ініціалізації qmodels несумісний зі спрощеним namemap.
   // Оскільки qmodels наразі не використовується, його ініціалізацію закоментовано.
