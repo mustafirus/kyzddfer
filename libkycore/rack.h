@@ -1,5 +1,6 @@
 #pragma once
 // @preserve all comments
+#include <any>
 #include <atomic>
 #include <cassert>
 #include <fstream>
@@ -17,7 +18,7 @@
 #include <unordered_set>
 #include <variant>
 #include <vector>
-#include <any>
+
 #include "RUIDGen.h"
 
 namespace ky {
@@ -30,7 +31,7 @@ using flags_t = std::unordered_set<string>;
 using vector_prf = std::vector<RField*>;
 
 using attrs_t = std::unordered_map<string, string>;
-using roid_t = uint32_t; // Random Object ID based on RUIDGen
+using roid_t = uint32_t;  // Random Object ID based on RUIDGen
 
 template <typename T>
 inline typename T::mapped_type get_default(const T& container, const typename T::key_type& key,
@@ -93,7 +94,7 @@ private:
 public:
   explicit svparts_t(sv name);
   sv pop();
-  operator bool(){return !parts.empty();}
+  operator bool() { return !parts.empty(); }
 };
 
 // Попередні оголошення
@@ -222,7 +223,6 @@ private:
 
 /// --- Структури для представлення даних у макеті, натхненні ky.proto.txt ---
 
-
 /// Базова структура вузла макета
 
 struct LayoutNode {
@@ -246,7 +246,7 @@ struct LayoutNode {
 struct LayoutField {
   uint32_t id = 0;
   string name;
-//  string type;
+  //  string type;
   flags_t flags;
   attrs_t attrs;
 
@@ -262,7 +262,7 @@ struct LayoutNodeBox : LayoutNode {
 };
 
 struct LayoutNodeList : LayoutNode {
-//  std::unique_ptr<RecordsetParams> recordset;
+  //  std::unique_ptr<RecordsetParams> recordset;
   std::vector<std::unique_ptr<LayoutField>> fields;
 
   // Для глибокого копіювання
@@ -274,7 +274,7 @@ struct LayoutNodeList : LayoutNode {
 };
 
 struct LayoutNodeForm : LayoutNode {
-  //std::unique_ptr<RecordParams> record;
+  // std::unique_ptr<RecordParams> record;
 
   // Для глибокого копіювання
   LayoutNodeForm() = default;
@@ -405,40 +405,43 @@ struct App {
 /// @brief Абстрактний базовий клас для всіх драйверів баз даних.
 class SqlDB {
 public:
-    /// @brief Абстрактний клас для представлення результату SQL-запиту.
-    class Result {
-    public:
-        virtual ~Result() = default;
+  /// @brief Абстрактний клас для представлення результату SQL-запиту.
+  class Result {
+  public:
+    virtual ~Result() = default;
 
-        /// @brief Повертає кількість рядків у результаті.
-        virtual int row_count() const = 0;
+    /// @brief Повертає кількість рядків у результаті.
+    virtual int row_count() const = 0;
 
-        /// @brief Повертає кількість колонок у результаті.
-        virtual int column_count() const = 0;
+    /// @brief Повертає кількість колонок у результаті.
+    virtual int column_count() const = 0;
 
-        /// @brief Не Повертає назву колонки за її індексом - є rfields
-        /// virtual ky::string column_name(int col) const = 0;
+    /// @brief Не Повертає назву колонки за її індексом - є rfields
+    /// virtual ky::string column_name(int col) const = 0;
 
-        /// @brief Повертає значення комірки за індексами рядка та колонки.
-        /// @return Повертає string_view на дані. Якщо значення NULL, повертає порожній string_view.
-        virtual ky::optsv get_value(int row, int col) const = 0;
-        std::any rfields; 
-    };
+    /// @brief Повертає значення комірки за індексами рядка та колонки.
+    /// @return Повертає string_view на дані. Якщо значення NULL, повертає порожній string_view.
+    virtual ky::optsv get_value(int row, int col) const = 0;
+    std::any rfields;
+  };
 
-    virtual ~SqlDB() = default;
+  virtual ~SqlDB() = default;
 
-    /// Виконати запит, що повертає дані (SELECT).
-    /// Драйвер несе відповідальність за кешування підготовлених запитів.
-    /// @param sql Текст SQL-запиту з плейсхолдерами $1, $2, ...
-    /// @param params Вектор параметрів для запиту.
-    /// @return Повертає унікальний вказівник на об'єкт з результатом.
-    virtual std::unique_ptr<Result> query(sv sql, const std::vector<string>& params) = 0;
-    
-    /// Виконати запит, що не повертає дані (INSERT, UPDATE, DELETE).
-    /// @param sql SQL-запит.
-    /// @param params Вектор параметрів.
-    /// @return Повертає кількість змінених рядків.
-    virtual int execute(sv sql, const std::vector<string>& params) = 0;
+  /// Виконати запит, що повертає дані (SELECT).
+  /// Драйвер несе відповідальність за кешування підготовлених запитів.
+  /// @param sql Текст SQL-запиту з плейсхолдерами $1, $2, ...
+  /// @param params Вектор параметрів для запиту.
+  /// @return Повертає унікальний вказівник на об'єкт з результатом.
+  virtual std::unique_ptr<Result> query(sv sql, const std::vector<string>& params) = 0;
+  /// Виконати одноразовий запит, що повертає дані, БЕЗ кешування.
+  /// Ідеально для унікальних динамічних запитів, як-от SELECT ... IN (...)
+  virtual std::unique_ptr<Result> query_once(sv sql, const std::vector<string>& params) = 0;
+
+  /// Виконати запит, що не повертає дані (INSERT, UPDATE, DELETE).
+  /// @param sql SQL-запит.
+  /// @param params Вектор параметрів.
+  /// @return Повертає кількість змінених рядків.
+  virtual int execute(sv sql, const std::vector<string>& params) = 0;
 };
 
 struct Rack {
@@ -460,6 +463,7 @@ struct Rack {
   void finalize();
 
   void print_stats() const;
+
 private:
   void finalize_id();
   void finalize_apps();
