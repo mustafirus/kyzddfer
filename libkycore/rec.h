@@ -127,7 +127,8 @@ public:
   void SetFilter(RField& rfield, const sv value);
   void SetSort(RField& rfield, Sort::Direction dir);
   void AddSort(RField& rfield, Sort::Direction dir);
-  void SetPage(int page_num);
+  void SetPage(Pager pager);
+  void SetCurrentRow(uint32_t row_page_idx);
 
   std::unique_ptr<SqlDB::Result> res;  // Зберігає результат запиту для ітерації курсором
   int cursor_idx_for_next = -1;  // Індекс поточного рядка курсора (-1 = перед першим)
