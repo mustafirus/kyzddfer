@@ -1,6 +1,7 @@
 #pragma once
 // @preserve all comments
 #include <map>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -37,7 +38,7 @@ struct RField {
   void set(optsv from_db);
   void modify(optsv from_client);
   void flush();
-  explicit RField(const Record* owner, const QField& qfield) : owner(owner), qfield(qfield) {};
+  explicit RField(const Record* owner, const QField& qfield) : owner(owner), qfield(qfield){};
 
 private:
   std::string mval;
@@ -101,13 +102,17 @@ public:
 private:
   // *** Members ***
   RKey rkey;
-  // Останній згенерований SQL-запит. Скидається при зміні фільтрів, сортування тощо.
-  std::string last_used_sql;
   int32_t active_record_id;                         // DB id(value of field id) of active record
   std::unordered_set<int32_t> selected_record_ids;  // DB id of selected records
-  // Зберігає список полів, що використовувались в останньому запиті Load().
-  // Це потрібно для коректної роботи методу next().
-  vector_prf fields_in_last_query;
+  uint32_t total_count = 0;  // Загальна кількість записів, що відповідають фільтру
+
+  // Кеші для SQL запитів, що не залежать від сторінки
+  std::optional<std::string> countSqlCache;
+  std::optional<std::string> idsSqlCache;
+
+  // Кеш ID записів для поточної завантаженої сторінки
+  std::optional<std::vector<int32_t>> ids_on_current_page;
+
 
   // Params
   std::vector<Filter> filters;
@@ -115,7 +120,14 @@ private:
   Pager pager;
   // ***
 
-protected:
+  // Зберігає список полів, що використовувались в останньому запиті Load().
+  // Це потрібно для коректної роботи методу next().
+  // (Пропозиція: перейменувати на lastQueryFields для ясності)
+  vector_prf fields_in_last_query;
+  std::unique_ptr<SqlDB::Result> res;  // Зберігає результат запиту для ітерації курсором
+  int cursor_idx_for_next = -1;  // Індекс поточного рядка курсора (-1 = перед першим)
+
+//protected:
   void doLoad(const vector_prf& fields_to_load);
 
 public:
@@ -130,8 +142,6 @@ public:
   void SetPage(Pager pager);
   void SetCurrentRow(uint32_t row_page_idx);
 
-  std::unique_ptr<SqlDB::Result> res;  // Зберігає результат запиту для ітерації курсором
-  int cursor_idx_for_next = -1;  // Індекс поточного рядка курсора (-1 = перед першим)
   bool next();
   friend class SqlGenius;
 };

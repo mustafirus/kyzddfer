@@ -205,59 +205,78 @@ Recordset::Recordset(QModel& qmodel) : Record(rkey) { rkey.tgtQModel = &qmodel; 
 
 const RKey& Recordset::getRKey() const { return rkey; }
 
+// rec.cpp
+
 void Recordset::doLoad(const vector_prf& fields_to_load) {
   SqlGenius genius(this);
   auto& db = Rack::get().sqldb;
 
-  // === КРОК 1: Отримати загальну кількість записів для пагінації ===
-  std::string count_sql = genius.gen_select_count();  //
-  if (!count_sql.empty()) {
-    auto count_params = genius.getOrderedParams(count_sql);
-    std::unique_ptr<SqlDB::Result> count_res = db->query(count_sql, count_params);
+  // --- КРОК 1: Завжди отримуємо актуальну загальну кількість записів ---
+  if (!countSqlCache) {
+    // Генеруємо SQL для COUNT, тільки якщо він не був кешований
+    countSqlCache = genius.gen_select_count();
+  }
+  
+  if (countSqlCache && !countSqlCache->empty()) {
+    auto count_params = genius.getOrderedParams(*countSqlCache);
+    std::unique_ptr<SqlDB::Result> count_res = db->query(*countSqlCache, count_params);
     if (count_res && count_res->row_count() > 0) {
-      // Встановлюємо загальну кількість записів у пейджер
-      // pager.total_items = std::stoi(count_res->get_value(0, 0).value());
+      this->total_count = std::stoi(std::string(count_res->get_value(0, 0).value()));
+    } else {
+      this->total_count = 0;
     }
   }
 
-  // === КРОК 2: Отримати ID записів для поточної сторінки ===
-  std::string ids_sql = genius.gen_select_ids();  //
-  if (ids_sql.empty()) {
-    res.reset();  // Немає ID - немає даних
-    return;
-  }
-
-  auto ids_params = genius.getOrderedParams(ids_sql);
-  std::unique_ptr<SqlDB::Result> ids_res = db->query(ids_sql, ids_params);
-
-  std::vector<std::string> ids_on_page;
-  if (ids_res && ids_res->row_count() > 0) {
-    for (int i = 0; i < ids_res->row_count(); ++i) {
-      ids_on_page.push_back(std::string(ids_res->get_value(i, 0).value()));
+  // --- КРОК 2: Завантажуємо ID для поточної сторінки (лише за потреби) ---
+  if (!ids_on_current_page) {
+    if (!idsSqlCache) {
+      // Генеруємо SQL для SELECT id, тільки якщо він не був кешований
+      idsSqlCache = genius.gen_select_ids();
     }
-  } else {
-    res.reset();  // Немає ID - немає даних
-    return;
+    
+    // Ініціалізуємо вектор, навіть якщо запит нічого не поверне
+    ids_on_current_page.emplace(); 
+
+    if (idsSqlCache && !idsSqlCache->empty()) {
+      auto ids_params = genius.getOrderedParams(*idsSqlCache);
+      std::unique_ptr<SqlDB::Result> ids_res = db->query(*idsSqlCache, ids_params);
+
+      if (ids_res && ids_res->row_count() > 0) {
+        ids_on_current_page->reserve(ids_res->row_count());
+        for (int i = 0; i < ids_res->row_count(); ++i) {
+          ids_on_current_page->push_back(std::stoi(std::string(ids_res->get_value(i, 0).value())));
+        }
+      }
+    }
   }
 
-  // === КРОК 3: Завантажити повні дані для ID поточної сторінки ===
-  // Використовуємо fields_to_load, передані як аргумент
-  std::string data_sql = genius.gen_select_by_ids(fields_to_load, ids_on_page);
-  if (data_sql.empty()) {
-    res.reset();
-    return;
+  // --- КРОК 3: Завантажуємо повні дані для ID поточної сторінки ---
+  
+  // Очищуємо старий тимчасовий результат
+  res.reset(); 
+  
+  if (ids_on_current_page && !ids_on_current_page->empty()) {
+    // Конвертуємо int32_t ID в std::string для SqlGenius
+    std::vector<std::string> ids_as_strings;
+    ids_as_strings.reserve(ids_on_current_page->size());
+    for(const auto& id : *ids_on_current_page) {
+        ids_as_strings.push_back(std::to_string(id));
+    }
+
+    std::string data_sql = genius.gen_select_by_ids(fields_to_load, ids_as_strings);
+    
+    if (!data_sql.empty()) {
+      auto data_params = genius.getOrderedParams(data_sql);
+      // Використовуємо query_once, щоб не засмічувати кеш
+      res = db->query_once(data_sql, data_params); 
+    }
   }
 
-  auto data_params = genius.getOrderedParams(data_sql);
-  // Зберігаємо фінальний результат у члені класу для подальшого використання методом next()
-  res = db->query(data_sql, data_params);  //
-
-  // Зберігаємо список полів, з якими був зроблений запит.
-  // Це потрібно для методу next(), щоб правильно зіставити колонки з полями.
-  fields_in_last_query = fields_to_load;
+  // Зберігаємо список полів, з якими був зроблений запит, для методу next()
+  this->fields_in_last_query = fields_to_load;
 
   // Скидаємо курсор перед першим записом
-  cursor_idx_for_next = -1;  //
+  cursor_idx_for_next = -1;
 }
 
 void Recordset::Load() {
@@ -296,19 +315,81 @@ void Recordset::Delete() {
   Load();
 }
 
+// rec.cpp (доповнення)
+
 void Recordset::SetFilter(RField& rfield, sv value) {
-  // TODO: Implement
-  throw std::logic_error("Recordset::setFilter not implemented");
+  // Перевірка, що поле належить цьому Recordset'у
+  assert(rfield.owner == this && "Attempted to set a filter using an RField from a different owner!");
+
+  // Патерн "знайти та оновити, або додати новий"
+  auto it = std::find_if(filters.begin(), filters.end(), 
+                         [&](const Filter& f) { return &f.rfield == &rfield; });
+
+  if (it != filters.end()) {
+    // Фільтр для цього поля вже існує, оновлюємо його значення
+    it->value = string(value);
+  } else {
+    // Додаємо новий фільтр
+    filters.push_back({rfield, string(value)});
+  }
+
+  // Зміна фільтра робить неактуальними і SQL, і список ID
+  countSqlCache.reset();
+  idsSqlCache.reset();
+  ids_on_current_page.reset();
+
+  // Завжди повертаємо користувача на першу сторінку після зміни фільтра
+  pager.offset = 0;
 }
 
 void Recordset::SetSort(RField& rfield, Sort::Direction dir) {
-  // TODO: Implement
-  throw std::logic_error("Recordset::setSort not implemented");
+  assert(rfield.owner == this && "Attempted to set a sort using an RField from a different owner!");
+  
+  // SetSort повністю замінює поточне сортування
+  sorts.clear();
+  sorts.push_back({rfield, dir});
+
+  // Зміна сортування робить неактуальними і SQL, і список ID
+  countSqlCache.reset();
+  idsSqlCache.reset();
+  ids_on_current_page.reset();
+  
+  // Завжди повертаємо користувача на першу сторінку
+  pager.offset = 0;
 }
 
-void Recordset::SetPage(int page_num) {
-  // TODO: Implement
-  throw std::logic_error("Recordset::setPage not implemented");
+void Recordset::SetPage(Pager newPager) {
+  // Оновлюємо параметри пагінації
+  this->pager = newPager;
+
+  // SQL-запити залишаються валідними, але список ID для старої сторінки вже неактуальний.
+  // Скидаємо його, щоб при наступному Load() завантажились ID для нової сторінки.
+  this->ids_on_current_page.reset();
+}
+
+// Реалізація AddSort, як обговорювалось
+void Recordset::AddSort(RField& rfield, Sort::Direction dir) {
+    assert(rfield.owner == this && "Attempted to add a sort using an RField from a different owner!");
+    
+    // Додаємо нове поле сортування до існуючих
+    sorts.push_back({rfield, dir});
+
+    // Логіка аналогічна SetSort
+    countSqlCache.reset();
+    idsSqlCache.reset();
+    ids_on_current_page.reset();
+    pager.offset = 0;
+}
+
+// Реалізація SetCurrentRow
+void Recordset::SetCurrentRow(uint32_t row_page_idx) {
+    if (ids_on_current_page && row_page_idx < ids_on_current_page->size()) {
+        this->active_record_id = (*ids_on_current_page)[row_page_idx];
+    } else {
+        // Якщо індекс виходить за межі або ID ще не завантажені,
+        // скидаємо активний запис.
+        this->active_record_id = 0;
+    }
 }
 
 bool Recordset::next() {
