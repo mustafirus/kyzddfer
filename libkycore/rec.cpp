@@ -31,6 +31,18 @@ void RField::modify(optsv from_client) {
   val = mval;  // view тепер завжди дивиться на наш mval
 }
 
+void RField::setId(sv new_id) const {
+  // Цей метод є const, але може змінювати mutable члени
+  is_null = new_id.empty();
+  if(is_null){
+    val = sv{};
+    mval.clear();
+  }else{
+    mval = new_id;
+    val = mval;
+  }
+}
+
 void RField::flush() {
   is_modified = false;
   is_null = true;
@@ -201,7 +213,10 @@ void Record::Undo() {
 
 // --- Recordset ---
 
-Recordset::Recordset(QModel& qmodel) : Record(rkey) { rkey.tgtQModel = &qmodel; }
+Recordset::Recordset(QModel& qmodel) : Record(rkey) {
+    rkey.tgtQModel = &qmodel;
+    rkey.srcRField = &getRField("id");
+}
 
 const RKey& Recordset::getRKey() const { return rkey; }
 
@@ -228,23 +243,23 @@ void Recordset::doLoad(const vector_prf& fields_to_load) {
   }
 
   // --- КРОК 2: Завантажуємо ID для поточної сторінки (лише за потреби) ---
-  if (!ids_on_current_page) {
+  if (!pageCursorIds) {
     if (!idsSqlCache) {
       // Генеруємо SQL для SELECT id, тільки якщо він не був кешований
       idsSqlCache = genius.gen_select_ids();
     }
     
     // Ініціалізуємо вектор, навіть якщо запит нічого не поверне
-    ids_on_current_page.emplace(); 
+    pageCursorIds.emplace(); 
 
     if (idsSqlCache && !idsSqlCache->empty()) {
       auto ids_params = genius.getOrderedParams(*idsSqlCache);
       std::unique_ptr<SqlDB::Result> ids_res = db->query(*idsSqlCache, ids_params);
 
       if (ids_res && ids_res->row_count() > 0) {
-        ids_on_current_page->reserve(ids_res->row_count());
+        pageCursorIds->reserve(ids_res->row_count());
         for (int i = 0; i < ids_res->row_count(); ++i) {
-          ids_on_current_page->push_back(std::stoi(std::string(ids_res->get_value(i, 0).value())));
+          pageCursorIds->push_back(std::stoi(std::string(ids_res->get_value(i, 0).value())));
         }
       }
     }
@@ -255,11 +270,11 @@ void Recordset::doLoad(const vector_prf& fields_to_load) {
   // Очищуємо старий тимчасовий результат
   res.reset(); 
   
-  if (ids_on_current_page && !ids_on_current_page->empty()) {
+  if (pageCursorIds && !pageCursorIds->empty()) {
     // Конвертуємо int32_t ID в std::string для SqlGenius
     std::vector<std::string> ids_as_strings;
-    ids_as_strings.reserve(ids_on_current_page->size());
-    for(const auto& id : *ids_on_current_page) {
+    ids_as_strings.reserve(pageCursorIds->size());
+    for(const auto& id : *pageCursorIds) {
         ids_as_strings.push_back(std::to_string(id));
     }
 
@@ -336,7 +351,7 @@ void Recordset::SetFilter(RField& rfield, sv value) {
   // Зміна фільтра робить неактуальними і SQL, і список ID
   countSqlCache.reset();
   idsSqlCache.reset();
-  ids_on_current_page.reset();
+  pageCursorIds.reset();
 
   // Завжди повертаємо користувача на першу сторінку після зміни фільтра
   pager.offset = 0;
@@ -352,7 +367,7 @@ void Recordset::SetSort(RField& rfield, Sort::Direction dir) {
   // Зміна сортування робить неактуальними і SQL, і список ID
   countSqlCache.reset();
   idsSqlCache.reset();
-  ids_on_current_page.reset();
+  pageCursorIds.reset();
   
   // Завжди повертаємо користувача на першу сторінку
   pager.offset = 0;
@@ -364,7 +379,7 @@ void Recordset::SetPage(Pager newPager) {
 
   // SQL-запити залишаються валідними, але список ID для старої сторінки вже неактуальний.
   // Скидаємо його, щоб при наступному Load() завантажились ID для нової сторінки.
-  this->ids_on_current_page.reset();
+  this->pageCursorIds.reset();
 }
 
 // Реалізація AddSort, як обговорювалось
@@ -377,18 +392,21 @@ void Recordset::AddSort(RField& rfield, Sort::Direction dir) {
     // Логіка аналогічна SetSort
     countSqlCache.reset();
     idsSqlCache.reset();
-    ids_on_current_page.reset();
+    pageCursorIds.reset();
     pager.offset = 0;
 }
-
-// Реалізація SetCurrentRow
 void Recordset::SetCurrentRow(uint32_t row_page_idx) {
-    if (ids_on_current_page && row_page_idx < ids_on_current_page->size()) {
-        this->active_record_id = (*ids_on_current_page)[row_page_idx];
+    assert(rkey.srcRField && "rkey.srcRField is not initialized in Recordset constructor!");
+
+    if (pageCursorIds && row_page_idx < pageCursorIds->size()) {
+        const string& new_active_id = (*pageCursorIds)[row_page_idx];
+
+        // Використовуємо новий, семантично чистий const метод.
+        // Це сигналізує, що ми не змінюємо логічний стан Recordset,
+        // а лише пересуваємо внутрішній "повзунок".
+        rkey.srcRField->setId(new_active_id);
     } else {
-        // Якщо індекс виходить за межі або ID ще не завантажені,
-        // скидаємо активний запис.
-        this->active_record_id = 0;
+        rkey.srcRField->setId(sv{});
     }
 }
 

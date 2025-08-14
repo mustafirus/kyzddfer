@@ -32,16 +32,17 @@ struct RField {
   const RKey* link = nullptr;                 /// Для зв'язку "один-до-багатьох"
 
   bool aux = false;  /// auxiliary переважно для зберігання id та *_id полів
-  sv val;
-  bool is_null = true;
+  mutable sv val;
+  mutable bool is_null = true;
   bool is_modified = false;
   void set(optsv from_db);
   void modify(optsv from_client);
+  void setId(sv new_id) const;
   void flush();
   explicit RField(const Record* owner, const QField& qfield) : owner(owner), qfield(qfield){};
 
 private:
-  std::string mval;
+  mutable std::string mval;
 };
 
 class Record {
@@ -102,17 +103,15 @@ public:
 private:
   // *** Members ***
   RKey rkey;
-  int32_t active_record_id;                         // DB id(value of field id) of active record
-  std::unordered_set<int32_t> selected_record_ids;  // DB id of selected records
-  uint32_t total_count = 0;  // Загальна кількість записів, що відповідають фільтру
+  std::unordered_set<string> selected_record_ids;  // DB id of selected records
+  uint32_t total_count = 0;
 
   // Кеші для SQL запитів, що не залежать від сторінки
   std::optional<std::string> countSqlCache;
   std::optional<std::string> idsSqlCache;
 
   // Кеш ID записів для поточної завантаженої сторінки
-  std::optional<std::vector<int32_t>> ids_on_current_page;
-
+  std::optional<std::vector<string>> pageCursorIds;
 
   // Params
   std::vector<Filter> filters;
@@ -127,7 +126,7 @@ private:
   std::unique_ptr<SqlDB::Result> res;  // Зберігає результат запиту для ітерації курсором
   int cursor_idx_for_next = -1;  // Індекс поточного рядка курсора (-1 = перед першим)
 
-//protected:
+
   void doLoad(const vector_prf& fields_to_load);
 
 public:
