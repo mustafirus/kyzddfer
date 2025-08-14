@@ -166,7 +166,8 @@ void Record::Save() {
     if (res && res->row_count() > 0) {
       // Оновлюємо ID нашого запису з відповіді БД
       // Ця логіка потребуватиме реалізації отримання ID з RKey
-      // update_record_id(res->get_value(0, 0));
+      // **ВИПРАВЛЕНО:** Використовуємо rkey для встановлення ID
+      rkey.srcRField->setId(res->get_value(0, 0).value_or(""));
       is_new = false;
     } else {
       throw std::runtime_error("Failed to retrieve new ID after INSERT.");
@@ -259,7 +260,8 @@ void Recordset::doLoad(const vector_prf& fields_to_load) {
       if (ids_res && ids_res->row_count() > 0) {
         pageCursorIds->reserve(ids_res->row_count());
         for (int i = 0; i < ids_res->row_count(); ++i) {
-          pageCursorIds->push_back(std::stoi(std::string(ids_res->get_value(i, 0).value())));
+          // **ВИПРАВЛЕНО:** Тепер `pageCursorIds` є `vector<string>`, тому `stoi` не потрібен.
+          pageCursorIds->push_back(std::string(ids_res->get_value(i, 0).value()));
         }
       }
     }
@@ -271,14 +273,8 @@ void Recordset::doLoad(const vector_prf& fields_to_load) {
   res.reset(); 
   
   if (pageCursorIds && !pageCursorIds->empty()) {
-    // Конвертуємо int32_t ID в std::string для SqlGenius
-    std::vector<std::string> ids_as_strings;
-    ids_as_strings.reserve(pageCursorIds->size());
-    for(const auto& id : *pageCursorIds) {
-        ids_as_strings.push_back(std::to_string(id));
-    }
-
-    std::string data_sql = genius.gen_select_by_ids(fields_to_load, ids_as_strings);
+    // **ВИПРАВЛЕНО:** Конвертація ID в рядки більше не потрібна.
+    std::string data_sql = genius.gen_select_by_ids(fields_to_load, *pageCursorIds);
     
     if (!data_sql.empty()) {
       auto data_params = genius.getOrderedParams(data_sql);
@@ -305,10 +301,11 @@ void Recordset::Delete() {
   // 1. Визначаємо, що видаляти: виділені записи чи активний
   if (!selected_record_ids.empty()) {
     for (const auto& id : selected_record_ids) {
-      ids_to_delete.push_back(std::to_string(id));
+      ids_to_delete.push_back(id);
     }
-  } else if (active_record_id > 0) {
-    ids_to_delete.push_back(std::to_string(active_record_id));
+  } else if (!rkey.srcRField->is_null) {
+    // **ВИПРАВЛЕНО:** Отримуємо ID активного запису з `rkey`.
+    ids_to_delete.push_back(std::string(rkey.srcRField->val));
   }
 
   if (ids_to_delete.empty()) {
