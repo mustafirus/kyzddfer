@@ -54,7 +54,7 @@ void RField::flush() {
 
 Record::Record(RKey& rkey) : rkey(rkey) {}
 
-const Record::RFields& Record::getRFields() const { return rfields; }
+//const Record::RFields& Record::getRFields() const { return rfields; }
 
 RField& Record::getRField(sv name) {
   const QField* pqf = rkey.tgtQModel->getQField(name);
@@ -74,6 +74,16 @@ RField& Record::getRField(sv name) {
     rf.rkey = std::make_unique<RKey>(rf, *p_qmodel);
   }
   return rf;
+}
+
+RField* Record::getRField(const QTable* pqt, const Field* pf) {
+  for (const auto& rf_ptr : rfields) {
+    const auto& qfield = rf_ptr->qfield;
+    if (qfield.pqt == pqt && qfield.pf == pf) {
+      return rf_ptr.get();
+    }
+  }
+  return nullptr;
 }
 
 void Record::New() {

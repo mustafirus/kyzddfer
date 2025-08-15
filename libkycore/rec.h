@@ -65,9 +65,19 @@ protected:
 
 public:
   Record(RKey& rkey);
-  const RFields& getRFields() const;
+  //  const RFields& getRFields() const;
 
   RField& getRField(sv name);
+
+  /**
+   * @brief Знаходить існуючий RField за прямими вказівниками на QTable та Field.
+   * @details Цей метод виконує лише пошук серед вже ініціалізованих полів.
+   * Він не створює новий RField, якщо його не знайдено.
+   * @param pqt Вказівник на кваліфіковану таблицю (QTable).
+   * @param pf Вказівник на метадані поля (Field).
+   * @return Вказівник на знайдений RField або `nullptr`, якщо поле не знайдено.
+   */
+  RField* getRField(const QTable* pqt, const Field* pf);
 
   void New();
   void Load();
