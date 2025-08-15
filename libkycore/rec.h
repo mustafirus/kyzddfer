@@ -16,20 +16,20 @@ class Recordset;
 struct RKey {
   /// For Link
   const RField* srcRField = nullptr;
-  const QModel* tgtQModel = nullptr;
+  QModel* tgtQModel = nullptr;
 
   /// For Recordset
   RKey() = default;
 
-  RKey(const RField& src, const QModel& tgt) : srcRField(&src), tgtQModel(&tgt) {}
+  RKey(const RField& src, QModel& tgt) : srcRField(&src), tgtQModel(&tgt) {}
 };
 
 struct RField {
   const Record* owner;
   roid_t roid;
   const QField& qfield;
-  std::unique_ptr<const RKey> rkey{nullptr};  /// Для FK-зв'язку "один-до-одного"
-  const RKey* link = nullptr;                 /// Для зв'язку "один-до-багатьох"
+  std::unique_ptr<RKey> rkey{nullptr};  /// Для FK-зв'язку "один-до-одного"
+  RKey* link = nullptr;                 /// Для зв'язку "один-до-багатьох"
 
   bool aux = false;  /// auxiliary переважно для зберігання id та *_id полів
   mutable sv val;
@@ -75,7 +75,6 @@ public:
   void Save();
   void Delete();
   void Undo();
-  void SetField(RField& rfield, const sv value);
   void SetVisibleFields(const vector_prf& fields);
   friend class SqlGenius;
   virtual ~Record() = default;
@@ -103,6 +102,9 @@ public:
 private:
   // *** Members ***
   RKey rkey;
+  RField* lookupRField = nullptr;
+  RField* rlink = nullptr;
+
   std::unordered_set<string> selected_record_ids;  // DB id of selected records
   uint32_t total_count = 0;
 
@@ -126,11 +128,30 @@ private:
   std::unique_ptr<SqlDB::Result> res;  // Зберігає результат запиту для ітерації курсором
   int cursor_idx_for_next = -1;  // Індекс поточного рядка курсора (-1 = перед першим)
 
-
   void doLoad(const vector_prf& fields_to_load);
 
 public:
   Recordset(QModel& qmodel);
+
+  /**
+   * @brief Створює динамічно пов'язаний дочірній список (Child List).
+   * @details Цей конструктор встановлює постійний "живий" зв'язок
+   * з батьківським RKey. Перед кожним завантаженням він буде
+   * автоматично фільтруватися за актуальним значенням з батька.
+   *
+   * @param qmodel Модель даних для цього (дочірнього) Recordset'а.
+   * @param parentRKey Ключ батьківського запису, що є джерелом значення.
+   * @param refFieldName Назва поля зовнішнього ключа в цій (дочірній) таблиці.
+   */
+  explicit Recordset(QModel& qmodel, RKey& parentRKey, sv refFieldName);
+
+  /**
+   * @brief Створює пов'язаний Recordset (для Lookup).
+   * ### Сценарій 2: Lookup (Вибір значення)
+   * @param lookupRField RField, що ініціював створення цього списку.
+   */
+  explicit Recordset(RField& lookupRField);
+
   const RKey& getRKey() const;
 
   void Load();
@@ -140,6 +161,9 @@ public:
   void AddSort(RField& rfield, Sort::Direction dir);
   void SetPage(Pager pager);
   void SetCurrentRow(uint32_t row_page_idx);
+
+  // Метод для застосування вибору і повернення значення
+  void ApplySelection();
 
   bool next();
   friend class SqlGenius;

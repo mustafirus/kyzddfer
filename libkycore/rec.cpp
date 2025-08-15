@@ -34,10 +34,10 @@ void RField::modify(optsv from_client) {
 void RField::setId(sv new_id) const {
   // Цей метод є const, але може змінювати mutable члени
   is_null = new_id.empty();
-  if(is_null){
+  if (is_null) {
     val = sv{};
     mval.clear();
-  }else{
+  } else {
     mval = new_id;
     val = mval;
   }
@@ -65,7 +65,7 @@ RField& Record::getRField(sv name) {
     }
   }
 
-  RField& rf = *rfields.emplace_back(std::make_unique<RField>(RField{this,*pqf}));
+  RField& rf = *rfields.emplace_back(std::make_unique<RField>(RField{this, *pqf}));
   auto t = pqf->pf->type;
   if (pqf->pqt->isMaster() && t->is_ref()) {
     // NOTE: qmodels - dynamycaly updates
@@ -197,11 +197,6 @@ void Record::Delete() {
   // flush_fields();
 }
 
-void Record::SetField(RField& rfield, const sv value) {
-  // TODO: Implement
-  throw std::logic_error("Record::Set not implemented");
-}
-
 void Record::Undo() {
   if (is_new) {
     // Якщо запис ще не збережений, Undo повертає його до початкового стану.
@@ -215,8 +210,18 @@ void Record::Undo() {
 // --- Recordset ---
 
 Recordset::Recordset(QModel& qmodel) : Record(rkey) {
-    rkey.tgtQModel = &qmodel;
-    rkey.srcRField = &getRField("id");
+  rkey.tgtQModel = &qmodel;
+  rkey.srcRField = &getRField("id");
+}
+
+Recordset::Recordset(RField& lookupRField_ref) : Recordset(*lookupRField_ref.rkey->tgtQModel) {
+  lookupRField = &lookupRField_ref;
+  /// UNIMPLEMENTED Поки не Перевіряємо, чи є для цього поля вбудований фільтр у метаданих.
+}
+
+Recordset::Recordset(QModel& qmodel, RKey& parentRKey, sv refFieldName) : Recordset(qmodel) {
+  rlink = &getRField(refFieldName);
+  rlink->link = &parentRKey;
 }
 
 const RKey& Recordset::getRKey() const { return rkey; }
@@ -232,7 +237,7 @@ void Recordset::doLoad(const vector_prf& fields_to_load) {
     // Генеруємо SQL для COUNT, тільки якщо він не був кешований
     countSqlCache = genius.gen_select_count();
   }
-  
+
   if (countSqlCache && !countSqlCache->empty()) {
     auto count_params = genius.getOrderedParams(*countSqlCache);
     std::unique_ptr<SqlDB::Result> count_res = db->query(*countSqlCache, count_params);
@@ -249,9 +254,9 @@ void Recordset::doLoad(const vector_prf& fields_to_load) {
       // Генеруємо SQL для SELECT id, тільки якщо він не був кешований
       idsSqlCache = genius.gen_select_ids();
     }
-    
+
     // Ініціалізуємо вектор, навіть якщо запит нічого не поверне
-    pageCursorIds.emplace(); 
+    pageCursorIds.emplace();
 
     if (idsSqlCache && !idsSqlCache->empty()) {
       auto ids_params = genius.getOrderedParams(*idsSqlCache);
@@ -268,18 +273,18 @@ void Recordset::doLoad(const vector_prf& fields_to_load) {
   }
 
   // --- КРОК 3: Завантажуємо повні дані для ID поточної сторінки ---
-  
+
   // Очищуємо старий тимчасовий результат
-  res.reset(); 
-  
+  res.reset();
+
   if (pageCursorIds && !pageCursorIds->empty()) {
     // **ВИПРАВЛЕНО:** Конвертація ID в рядки більше не потрібна.
     std::string data_sql = genius.gen_select_by_ids(fields_to_load, *pageCursorIds);
-    
+
     if (!data_sql.empty()) {
       auto data_params = genius.getOrderedParams(data_sql);
       // Використовуємо query_once, щоб не засмічувати кеш
-      res = db->query_once(data_sql, data_params); 
+      res = db->query_once(data_sql, data_params);
     }
   }
 
@@ -334,8 +339,7 @@ void Recordset::SetFilter(RField& rfield, sv value) {
   assert(rfield.owner == this && "Attempted to set a filter using an RField from a different owner!");
 
   // Патерн "знайти та оновити, або додати новий"
-  auto it = std::find_if(filters.begin(), filters.end(), 
-                         [&](const Filter& f) { return &f.rfield == &rfield; });
+  auto it = std::find_if(filters.begin(), filters.end(), [&](const Filter& f) { return &f.rfield == &rfield; });
 
   if (it != filters.end()) {
     // Фільтр для цього поля вже існує, оновлюємо його значення
@@ -356,7 +360,7 @@ void Recordset::SetFilter(RField& rfield, sv value) {
 
 void Recordset::SetSort(RField& rfield, Sort::Direction dir) {
   assert(rfield.owner == this && "Attempted to set a sort using an RField from a different owner!");
-  
+
   // SetSort повністю замінює поточне сортування
   sorts.clear();
   sorts.push_back({rfield, dir});
@@ -365,7 +369,7 @@ void Recordset::SetSort(RField& rfield, Sort::Direction dir) {
   countSqlCache.reset();
   idsSqlCache.reset();
   pageCursorIds.reset();
-  
+
   // Завжди повертаємо користувача на першу сторінку
   pager.offset = 0;
 }
@@ -381,30 +385,42 @@ void Recordset::SetPage(Pager newPager) {
 
 // Реалізація AddSort, як обговорювалось
 void Recordset::AddSort(RField& rfield, Sort::Direction dir) {
-    assert(rfield.owner == this && "Attempted to add a sort using an RField from a different owner!");
-    
-    // Додаємо нове поле сортування до існуючих
-    sorts.push_back({rfield, dir});
+  assert(rfield.owner == this && "Attempted to add a sort using an RField from a different owner!");
 
-    // Логіка аналогічна SetSort
-    countSqlCache.reset();
-    idsSqlCache.reset();
-    pageCursorIds.reset();
-    pager.offset = 0;
+  // Додаємо нове поле сортування до існуючих
+  sorts.push_back({rfield, dir});
+
+  // Логіка аналогічна SetSort
+  countSqlCache.reset();
+  idsSqlCache.reset();
+  pageCursorIds.reset();
+  pager.offset = 0;
 }
 void Recordset::SetCurrentRow(uint32_t row_page_idx) {
-    assert(rkey.srcRField && "rkey.srcRField is not initialized in Recordset constructor!");
+  assert(rkey.srcRField && "rkey.srcRField is not initialized in Recordset constructor!");
 
-    if (pageCursorIds && row_page_idx < pageCursorIds->size()) {
-        const string& new_active_id = (*pageCursorIds)[row_page_idx];
+  if (pageCursorIds && row_page_idx < pageCursorIds->size()) {
+    const string& new_active_id = (*pageCursorIds)[row_page_idx];
 
-        // Використовуємо новий, семантично чистий const метод.
-        // Це сигналізує, що ми не змінюємо логічний стан Recordset,
-        // а лише пересуваємо внутрішній "повзунок".
-        rkey.srcRField->setId(new_active_id);
-    } else {
-        rkey.srcRField->setId(sv{});
-    }
+    // Використовуємо новий, семантично чистий const метод.
+    // Це сигналізує, що ми не змінюємо логічний стан Recordset,
+    // а лише пересуваємо внутрішній "повзунок".
+    rkey.srcRField->setId(new_active_id);
+  } else {
+    rkey.srcRField->setId(sv{});
+  }
+}
+
+// Метод застосування вибору
+void Recordset::ApplySelection() {
+  // Якщо вказівник на поле-джерело існує, значить,
+  // цей Recordset використовується для вибору.
+  if (lookupRField) {
+    // Беремо значення ID з поточного рядка...
+    sv selectedId = this->rkey.srcRField->val;
+    // ...і напряму модифікуємо поле-джерело.
+    lookupRField->modify(selectedId);
+  }
 }
 
 bool Recordset::next() {
@@ -422,8 +438,7 @@ bool Recordset::next() {
 
   // 1. Перевірка на консистентність: кількість колонок у результаті
   // має збігатися з кількістю полів, які ми запитували.
-  assert(res->column_count() == fields_in_last_query.size() &&
-         "Mismatch between data columns and RField pointers");
+  assert(res->column_count() == fields_in_last_query.size() && "Mismatch between data columns and RField pointers");
 
   // 2. Заповнюємо RFields, ітеруючи по колонках і вектору fields_in_last_query_ одночасно
   for (int j = 0; j < res->column_count(); ++j) {
