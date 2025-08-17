@@ -53,9 +53,9 @@ public:
   using qtusedmap_t = std::map<sv, const QTable*>;
   using vector_pqf = std::vector<const QField*>;
 
+  const RKey& rkey;
 private:
   using RFields = std::vector<std::unique_ptr<RField>>;
-  const RKey& rkey;
   RFields rfields;
   bool is_new;
 
@@ -64,7 +64,7 @@ protected:
   void doLoad(const vector_prf& fields_to_load);
 
 public:
-  Record(RKey& rkey);
+  Record(const RKey& rkey);
   //  const RFields& getRFields() const;
 
   RField& getRField(sv name);
@@ -162,7 +162,7 @@ public:
    */
   explicit Recordset(RField& lookupRField);
 
-  const RKey& getRKey() const;
+//  const RKey& getRKey() const;
 
   void Load();
   void Delete();

@@ -52,7 +52,7 @@ void RField::flush() {
 
 // --- Record ---
 
-Record::Record(RKey& rkey) : rkey(rkey) {}
+Record::Record(const RKey& rkey) : rkey(rkey) {}
 
 //const Record::RFields& Record::getRFields() const { return rfields; }
 
