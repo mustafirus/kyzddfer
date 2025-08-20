@@ -22,6 +22,12 @@
 #include "RUIDGen.h"
 
 namespace ky {
+// Попередні оголошення
+struct Field;
+struct Table;
+struct Layout;
+struct LayoutNode;
+struct RField;
 
 using sv = std::string_view;
 using optsv = std::optional<std::string_view>;
@@ -32,6 +38,10 @@ using vector_prf = std::vector<RField*>;
 
 using attrs_t = std::unordered_map<string, string>;
 using roid_t = uint32_t;  // Random Object ID based on RUIDGen
+
+using fields_t = namemap<Field>;
+using tables_t = namemap<Table>;
+using nodes_t = std::vector<std::unique_ptr<LayoutNode>>;
 
 template <typename T>
 inline typename T::mapped_type get_default(const T& container, const typename T::key_type& key,
@@ -97,16 +107,7 @@ public:
   operator bool() { return !parts.empty(); }
 };
 
-// Попередні оголошення
-class Field;
-class Table;
-struct Layout;
-struct LayoutNode;
-
 // Псевдоніми типів
-using fields_t = namemap<Field>;
-using tables_t = namemap<Table>;
-using nodes_t = std::vector<std::unique_ptr<LayoutNode>>;
 struct Rack;
 struct type_t {
   string name;
@@ -295,6 +296,7 @@ struct LayoutNodeFieldBox : LayoutNode {
 // NOTE: Контейнер для макета
 struct Layout {
   string name;
+  QModel* qmodel;
   int8_t pri;
   flags_t media;  // Типи медіа, для яких призначено макет (наприклад, "desktop", "tab", "phone", "web")
   flags_t usage;  // Використання макета, наприклад, "menu", "detail", "select" тощо
@@ -305,8 +307,7 @@ struct Layout {
 
   // --- Конструктори та присвоєння ---
 
-  Layout() = default;                 // Потрібен для std::make_unique у clone_layout
-  explicit Layout(sv n) : name(n) {}  // Потрібен для фабрики namemap
+  Layout() = default;  // Потрібен для std::make_unique у clone_layout
 
   // Явно визначені конструктор копіювання та оператор присвоєння
   // для забезпечення глибокого копіювання `root_node`.
@@ -339,63 +340,10 @@ struct Layout {
   ~Layout() = default;
 };
 
-// Перевантаження оператора == для Layout
-inline bool operator==(const Layout& lhs, const Layout& rhs) {
-  // Порівняння має бути узгодженим з std::hash<ky::Layout>.
-  // Порівнюємо ті ж поля, що використовуються для обчислення хешу.
-  return lhs.name == rhs.name && lhs.pri == rhs.pri && lhs.media == rhs.media && lhs.usage == rhs.usage;
-}
-
-// Спеціалізація std::hash для ky::Layout
-// Ця спеціалізація повинна бути оголошена в глобальному просторі імен або в просторі імен std.
-// Оскільки вона стосується ky::Layout, її можна розмістити в просторі імен ky,
-// а потім використовувати std::hash<ky::Layout> через ADL або повне ім'я.
-// Однак, для std::hash, правильним місцем є простір імен std.
-// Оскільки ми не можемо відкривати std namespace в .h файлі,
-// ми можемо визначити її в глобальному просторі імен або в просторі імен ky
-// і покладатися на ADL, якщо це можливо, або використовувати повне ім'я.
-// Найкращий спосіб - це оголосити її в глобальному просторі імен або в просторі імен std
-// (якщо це дозволено політикою проекту).
-// Для простоти та уникнення відкриття std::, ми можемо визначити її в глобальному просторі імен.
-
-}  // namespace ky
-
-namespace std {
-template <>
-struct hash<ky::Layout> {
-  size_t operator()(const ky::Layout& l) const {
-    // Допоміжна лямбда для комбінування хешів, аналогічно до boost::hash_combine
-    auto hash_combine = [](size_t& seed, size_t hash_value) {
-      seed ^= hash_value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    };
-
-    size_t seed = 0;
-    hash_combine(seed, std::hash<std::string>{}(l.name));
-    hash_combine(seed, std::hash<int8_t>{}(l.pri));
-
-    size_t media_hash = 0;
-    for (const auto& s : l.media) {
-      media_hash ^= std::hash<std::string>{}(s);
-    }
-    hash_combine(seed, media_hash);
-
-    size_t usage_hash = 0;
-    for (const auto& s : l.usage) {
-      usage_hash ^= std::hash<std::string>{}(s);
-    }
-    hash_combine(seed, usage_hash);
-
-    return seed;
-  }
-};
-}  // namespace std
-
-namespace ky {  // Повертаємося до простору імен ky
-
 struct App {
-  using layset_t = std::unordered_set<Layout>;
-  using layvec_t = std::vector<Layout>;
-  using layouts_t = std::variant<layvec_t, layset_t>;
+  using layvecstr = std::vector<string>;
+  using layvecptr = std::vector<const Layout*>;
+  using layouts_t = std::variant<layvecstr, layvecptr>;
 
   string name;
   attrs_t attrs{};
@@ -445,19 +393,20 @@ public:
 };
 
 struct Rack {
+  using layvec_t = std::vector<Layout>;
   namemap<type_t> types{};
   namemap<Table> tables{};
+  layvec_t layouts{};
   namemap<App> apps{};
   flags_t flags{};
   attrs_t attrs{};
   std::unique_ptr<SqlDB> sqldb;
   mutable RUIDGen<roid_t> ruid32;
 
-  // Попередній механізм ініціалізації qmodels несумісний зі спрощеним namemap.
-  // Оскільки qmodels наразі не використовується, його ініціалізацію закоментовано.
   mutable namemap<QModel> qmodels{};
 
   static const Rack& get();
+  const Layout* Rack::findBestLayout(sv name, const QModel* qmodel, const string& media, const string& usage) const;
   string generate_sql() const;
   bool connect(sv connection_string);
   void finalize();

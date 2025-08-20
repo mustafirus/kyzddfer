@@ -219,7 +219,7 @@ void Record::Undo() {
 
 // --- Recordset ---
 
-Recordset::Recordset(QModel& qmodel) : Record(rkey) {
+Recordset::Recordset(const QModel& qmodel) : Record(rkey) {
   rkey.tgtQModel = &qmodel;
   rkey.srcRField = &getRField("id");
 }
@@ -229,12 +229,12 @@ Recordset::Recordset(RField& lookupRField_ref) : Recordset(*lookupRField_ref.rke
   /// UNIMPLEMENTED Поки не Перевіряємо, чи є для цього поля вбудований фільтр у метаданих.
 }
 
-Recordset::Recordset(QModel& qmodel, RKey& parentRKey, sv refFieldName) : Recordset(qmodel) {
+Recordset::Recordset(const QModel& qmodel, const RKey& parentRKey, sv refFieldName) : Recordset(qmodel) {
   rlink = &getRField(refFieldName);
   rlink->link = &parentRKey;
 }
 
-const RKey& Recordset::getRKey() const { return rkey; }
+//const RKey& Recordset::getRKey() const { return rkey; }
 
 // rec.cpp
 

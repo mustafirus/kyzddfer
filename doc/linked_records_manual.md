@@ -67,26 +67,31 @@
 
 **Приклад:** Форма редагування документа та список його рядків.
 
-**Рішення:** Дочірній `list` вкладається безпосередньо у батьківський `form`. Зв'язок встановлюється **неявно**, на основі аналізу схеми таблиць (поля типу `ref`).
+**Рішення:** Дочірній `list` вкладається безпосередньо у батьківський `form`. Зв'язок може встановлюватися **явно** або **неявно**.
+Атрібут link(<ref>:<id|ref2>) - де ref поле ref дочірнього `list`, id - поле id, ref2 - поле ref батьківського `form`
+якщо використовується поле id - його можна не вказувати(дефолт)
+якщо ref співпадає з назвою таблиці - його можна не вказувати(дефолт)
 
 ```ky
 # Схема
 tables
-  documents
+  document
     title varchar(255)
-  document_lines
-    document ref(documents)
-    line_text text
+  document_line
+    document ref(document)
     line_number int
+    line_text text
 
 # Лейаут
-form table(documents)
+form table(document)
   fieldbox
     title
   
-  # Цей список автоматично буде відфільтровано за {id}
-  # батьківського запису 'documents'.
-  list table(document_lines) title("Рядки документа")
+  # Цей список автоматично буде відфільтровано за document_id={id}
+  # батьківського запису 'document'.
+  # list table(document_line) link(document:id) title("Рядки документа")
+  # або спрощено
+  list table(document_line) title("Рядки документа")
     name
 ```
 

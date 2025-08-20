@@ -87,6 +87,49 @@ const Rack& Rack::get() {
   return r;
 }
 
+/**
+ * @brief Знаходить найкращий макет на основі імені, медіа та використання.
+ *
+ * @param name Назва макета, який потрібно знайти.
+ * @param media Тип медіа (наприклад, "desktop", "phone").
+ * @param usage Призначення макета (наприклад, "detail", "menu").
+ * @return Вказівник на найкращий відповідний Layout або nullptr, якщо нічого не знайдено.
+ */
+const Layout* Rack::findBestLayout(sv name, const QModel* qmodel, const std::string& media, const std::string& usage) const {
+  const Layout* best_layout = nullptr;
+  int8_t max_pri = std::numeric_limits<int8_t>::min();
+
+  for (auto& layout : layouts) {
+    if (!name.empty() && !layout.name.empty() && layout.name != name) {
+      continue;
+    }
+
+    if (qmodel && layout.qmodel && layout.qmodel != qmodel) {
+      continue;
+    }
+
+    if (!media.empty() && !layout.media.empty()) {
+      if (layout.media.find(media) == layout.media.end()) {
+        continue;
+      }
+    }
+
+    if (!usage.empty() && !layout.usage.empty()) {
+      if (layout.usage.find(usage) == layout.usage.end()) {
+        continue;
+      }
+    }
+
+    // Якщо макет пройшов усі перевірки, він є кандидатом
+    if (layout.pri > max_pri) {
+      max_pri = layout.pri;
+      best_layout = &layout;
+    }
+  }
+
+  return best_layout;
+}
+
 string Rack::generate_sql() const {
   // Ця функція призначена для генерації SQL-схеми, але наразі не реалізована.
   return "-- SQL schema generation is not implemented yet.\n";

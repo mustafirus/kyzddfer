@@ -16,7 +16,7 @@ class Recordset;
 struct RKey {
   /// For Link
   const RField* srcRField = nullptr;
-  QModel* tgtQModel = nullptr;
+  const QModel* tgtQModel = nullptr;
 
   /// For Recordset
   RKey() = default;
@@ -29,7 +29,7 @@ struct RField {
   roid_t roid;
   const QField& qfield;
   std::unique_ptr<RKey> rkey{nullptr};  /// Для FK-зв'язку "один-до-одного"
-  RKey* link = nullptr;                 /// Для зв'язку "один-до-багатьох"
+  const RKey* link = nullptr;                 /// Для зв'язку "один-до-багатьох"
 
   bool aux = false;  /// auxiliary переважно для зберігання id та *_id полів
   mutable sv val;
@@ -64,6 +64,7 @@ protected:
   void doLoad(const vector_prf& fields_to_load);
 
 public:
+  void* dto = nullptr;
   Record(const RKey& rkey);
   //  const RFields& getRFields() const;
 
@@ -141,7 +142,7 @@ private:
   void doLoad(const vector_prf& fields_to_load);
 
 public:
-  Recordset(QModel& qmodel);
+  Recordset(const QModel& qmodel);
 
   /**
    * @brief Створює динамічно пов'язаний дочірній список (Child List).
@@ -153,7 +154,7 @@ public:
    * @param parentRKey Ключ батьківського запису, що є джерелом значення.
    * @param refFieldName Назва поля зовнішнього ключа в цій (дочірній) таблиці.
    */
-  explicit Recordset(QModel& qmodel, RKey& parentRKey, sv refFieldName);
+  explicit Recordset(const QModel& qmodel, const RKey& parentRKey, sv refFieldName);
 
   /**
    * @brief Створює пов'язаний Recordset (для Lookup).
